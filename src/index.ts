@@ -17,14 +17,26 @@ import * as z from "zod";
 const schema = z.object({
 	foo: z.string(),
 });
-
-type StepFunction<Context, Logger> = (
+type StepFunctionReturn<ExpectedReturnSchema extends z.ZodSchema> =
+	| {
+			error: string;
+			response: null;
+			path: null;
+	  }
+	| {
+			error: null;
+			response: z.infer<ExpectedReturnSchema>;
+			path: null;
+	  }
+	| {
+			error: null;
+			response: null;
+			path: string;
+	  };
+type StepFunction<Context, Logger, ExpectedReturnSchema extends z.ZodSchema> = (
 	props: { context: Context },
 	logger: Logger,
-) => {
-	error: null | string;
-	response: unknown;
-};
+) => StepFunctionReturn<ExpectedReturnSchema>;
 type Logger = {
 	info: () => void;
 	warn: () => void;
@@ -38,18 +50,20 @@ type StateMachine = <Steps, Context>(
 		ExpectedReturnSchema extends z.ZodSchema = z.ZodSchema,
 		ExpectedBodySchema extends z.ZodSchema = z.ZodSchema,
 	>(props: {
-		step: StepFunction<Context, Logger>;
+		step: StepFunction<Context, Logger, ExpectedReturnSchema>;
 		name: StepName;
 		nextStep: Exclude<Steps, StepName> | null;
 		expectedReturnSchema: ExpectedReturnSchema;
 		expectedBodySchema: ExpectedBodySchema;
 		isInternal: boolean;
 	}) => void;
+	run: (ctx: Context) => Promise<void>;
 };
 
-const stateMachine: StateMachine = (_logger) => {
+const stateMachine: StateMachine = () => {
 	return {
 		register({ name }) {},
+		async run(ctx) {},
 	};
 };
 
@@ -83,14 +97,20 @@ stateMachineInstance.register({
 	name: "FIRST",
 	nextStep: "TWO",
 	isInternal: false,
-	step: () => ({ error: null, response: { foo: "aaa" } }),
+	step: () => ({ error: null, response: { firstReturn: true }, path: null }),
 });
 
+const secondSchemaBody = z.object({
+	second: z.boolean(),
+});
+const secondSchemaReturn = z.object({
+	secondReturn: z.boolean(),
+});
 stateMachineInstance.register({
-	expectedBodySchema: schema,
-	expectedReturnSchema: schema,
+	expectedBodySchema: secondSchemaBody,
+	expectedReturnSchema: secondSchemaReturn,
 	name: "TWO",
 	nextStep: null,
-	step: () => ({ error: null, response: { foo: "Last!" } }),
+	step: () => ({ error: null, response: { foo: "Last!" }, path: null }),
 	isInternal: true,
 });
